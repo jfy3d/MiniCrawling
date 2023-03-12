@@ -1,14 +1,15 @@
 [
   {
-    "site_name": "",
-    "site_url": "",
-    "list_type": "",
-    "xpath_list_link": "",
-    "xpath_list_title": "",
-    "xpath_title": "",
-    "xpath_body": "",
+    "id":"1",
+    "site_name": "macx",
+    "site_url": "https://www.macx.net/f-4000-1.html",
+    "list_type": "html",
+    "xpath_list_link": "//a[@class='xst']/@href",
+    "xpath_list_title": "//a[@class='xst']/text()",
+    "xpath_title": "//div[@class='v2-vbsub']/h1/text()",
+    "xpath_body": "//div[@class='v2-vboxfirst']",
     "processor": "",
-    "crawler": "",
+    "crawler": "app.crawler.base.GeneralParse?next_page:=//a[@class='nxt']/@href",
     "skip_filter": 0
   }
 ]

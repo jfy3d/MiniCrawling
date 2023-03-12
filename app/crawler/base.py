@@ -1,11 +1,8 @@
 from urllib.parse import urljoin
-from rule.crawler.loader import crawler_logger as logger, record_duplicate, record_filter, record_fail
 import settings
-from rule.common.db.cache import redis_client
-from rule.common.func import get_rnd_id, extract_date, get_now, get_encodings_from_content
-from rule.common.data import HEADERS, USER_AGENTS
-from rule.common.validator import validate_title, validate_url
-from rule.common.record import record_error
+
+from app.common.header import HEADERS, USER_AGENTS
+from app.common.func import get_encodings_from_content, get_now, extract_date, get_rnd_id
 from requests.adapters import HTTPAdapter
 import json
 import random
@@ -16,6 +13,9 @@ import datetime
 from lxml import etree
 import jsonpath
 import time
+import logging
+
+logger = logging.getLogger('crawler')
 
 
 class BaseParse(object):
@@ -60,11 +60,11 @@ class BaseParse(object):
             self.ignore_valid = True
 
     def get_last_url(self):
-        url = redis_client.get(settings.CRAWLER_POS_KEY.format(self.config['id']))
-        if url is not None:
-            url = url.decode('utf-8')
-        logger.info('<%s> (%s) 上次位置 : %s', self.config.get('id'), self.config.get('site_name'), url)
-        return url
+        # url = redis_client.get(settings.CRAWLER_POS_KEY.format(self.config['id']))
+        # if url is not None:
+        #     url = url.decode('utf-8')
+        # logger.info('<%s> (%s) 上次位置 : %s', self.config.get('id'), self.config.get('site_name'), url)
+        return None
 
     def create_item(self):
         item = {'id': get_rnd_id()}
@@ -113,17 +113,6 @@ class BaseParse(object):
         headers['Referer'] = referer
         return headers
 
-    def validate_url(self, url):
-        return validate_url(url)
-
-    def validate_title(self, title, channel=''):
-        return validate_title(title, channel)
-
-    def validate_item(self):
-        if not self.item.get('title') or not self.item.get('content'):
-            return False
-        return True
-
     def transfor(self, content):
         return content
 
@@ -161,15 +150,10 @@ class GeneralParse(BaseParse):
 
         _list_item = []
         for index in range(0, len(_href_list)):
-            if self.validate_url(_href_list[index]):
-                if self.validate_title(_title_list[index]):
-                    _list_item.append((_title_list[index], _href_list[index]))
-                else:
-                    logger.warn('<%s> (%s) 标题查重 %s', self.config.get('id'), self.config['site_name'],
-                                _title_list[index])
-            else:
-                logger.warn('<%s> (%s) 地址查重 %s', self.config.get('id'), self.config['site_name'], _href_list[index])
-        return {'next_url': '', 'list_item': _list_item}
+
+            _list_item.append((_title_list[index], _href_list[index]))
+
+        return {'next_url': _next_url, 'list_item': _list_item}
 
     """
     处理列表
@@ -193,9 +177,6 @@ class GeneralParse(BaseParse):
                     logger.warning('<%s> (%s) 未更新新文章', self.config.get('id'), self.config['site_name'])
                 self.stop = True
                 break
-            if index == 0 and self.page_index == 1:
-                # 记录每次最新BGC的文章
-                redis_client.set(settings.CRAWLER_POS_KEY.format(self.config['id']), url)
 
             self.parse_body(url)
             time.sleep(random.randint(1, 5) / 2)
@@ -203,6 +184,7 @@ class GeneralParse(BaseParse):
         # # 翻页
         if not self.stop and _page_info.get('next_url'):
             self.page_index += 1
+            logger.info('page next %s %s', self.page_index, _page_info.get('next_url'))
             self.parse_list(_page_info.get('next_url'))
 
     def parse_body(self, url):
@@ -247,11 +229,7 @@ class GeneralParse(BaseParse):
             return None
 
     def push_queue(self):
-        if self.validate_item():
-            redis_client.lpush(settings.ARTICLE_QUEUE_KEY, json.dumps(self.item))
-        else:
-            logger.error('<%s> (%s) 获取失败 %s ', self.config['id'], self.config['site_name'],
-                         self.config.get('site_url'))
+        logger.info('save item %s', self.item.get('title'))
 
     def load_item(self, response, url):
 
@@ -267,7 +245,6 @@ class GeneralParse(BaseParse):
             _mail_body = """
                         来源{0} {1}  未解析到文章标题  xpath:{2} {3}
                         """.format(self.config['site_name'], self.config['site_url'], self.xpath_title, url)
-            record_error(_mail_body)
             return self.item
 
         self.item['title'] = self.filter_title(_title)
@@ -282,7 +259,6 @@ class GeneralParse(BaseParse):
             _mail_body = """
             来源{0} {1}  未解析到文章正文  xpath:{2} {3} 错误等级：【严重】
             """.format(self.config['site_name'], self.config['site_url'], self.xpath_body, url)
-            record_error(_mail_body)
         else:
             self.item['content_text'] = re.sub(r'<\s*script[^>]*>[^<]*<\s*/\s*script\s*>', '', self.item['content'],
                                                count=0, flags=re.I)
@@ -307,7 +283,6 @@ class GeneralParse(BaseParse):
                             来源{0} {1}  没有提取到文章发布时间  xpath:{2} {3} 错误等级：【严重】
                             """.format(self.config['site_name'], self.config['site_url'],
                                        self.crawler_param_config.get('publish_date'), response.url)
-                record_error(_mail_body)
                 self.item['createdate'] = get_now()  # 解析文章的发布时间
         else:
             _publish_date = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')

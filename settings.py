@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 import os
 
+DATASOURCE = 'json'
+
 REDIS_HOST = os.getenv('REDIS_HOST')
 REDIS_PORT = 6379
 CONFIG_KEY = 'crawler_config'
 CRAWLER_POS_KEY = 'crawler_pos:{0}'
-LOG_PATH = os.getenv('LOG_PATH')
+LOG_PATH = os.getenv('LOG_PATH', 'logs')
 CRAWLER_ERROR_LIST_KEY = 'crawler_error_list'
 ARTICLE_QUEUE_KEY = 'article_queue'
 
